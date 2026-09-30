@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; --bg:#f6f7f9; --fg:#1b1f24; --card:#fff; --bd:#d8dce2; --accent:#2563eb; --warn:#b45309; --bad:#b91c1c; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e6e9ee; --card:#1d2126; --bd:#343a42; --accent:#6b9bff; --warn:#f0a53a; --bad:#f07070; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,sans-serif; }
+button { font:inherit; padding:6px 12px; border:1px solid var(--bd); border-radius:6px; background:var(--card); color:var(--fg); cursor:pointer; }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+button:disabled { opacity:.5; cursor:not-allowed; }
+input[type=text], input[type=number] { font:inherit; padding:6px 8px; border:1px solid var(--bd); border-radius:6px; background:var(--card); color:var(--fg); }

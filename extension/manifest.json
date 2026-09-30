@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Cooldown Blocker",
+  "version": "1.0.0",
+  "description": "Bloquea sitios para adultos. Cualquier cambio que debilite el bloqueo requiere esperar 30 minutos.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "declarativeNetRequest"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Cooldown Blocker",
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "incognito": "spanning",
+  "icons": {
+    "128": "icon.png"
+  }
+}

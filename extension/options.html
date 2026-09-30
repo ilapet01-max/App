@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Cooldown Blocker</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    section { background: var(--card); border: 1px solid var(--bd); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    h1 { margin-top: 0; } h2 { margin: 0 0 8px; font-size: 17px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row.between { justify-content: space-between; }
+    .muted { color: var(--warn); font-size: 13px; }
+    ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 280px; overflow: auto; }
+    li { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--bd); }
+    #msg { min-height: 1.4em; color: var(--accent); }
+    #msg.err { color: var(--bad); }
+    .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Cooldown Blocker</h1>
+  <p id="msg"></p>
+
+  <section>
+    <h2>Estado del bloqueo</h2>
+    <div class="row between">
+      <strong id="status"></strong>
+      <button id="toggle"></button>
+    </div>
+    <div class="row between" style="margin-top:8px">
+      <label><input type="checkbox" id="keywords"> Bloquear también por palabras clave en la dirección</label>
+    </div>
+    <p class="muted">Activar protecciones es inmediato. Desactivarlas exige esperar el tiempo de espera y confirmar.</p>
+  </section>
+
+  <section>
+    <h2>Solicitudes pendientes</h2>
+    <ul id="pending"></ul>
+    <p id="noPending" class="muted" style="color:inherit;opacity:.7">No hay solicitudes pendientes.</p>
+  </section>
+
+  <section>
+    <h2>Tiempo de espera</h2>
+    <div class="row">
+      <input type="number" id="cooldown" min="30" max="1440" style="width:90px"> minutos
+      <button id="setCooldown">Guardar</button>
+    </div>
+    <p class="muted">Subirlo es inmediato; bajarlo (mínimo 30) también requiere esperar.</p>
+  </section>
+
+  <section>
+    <h2>Sitios bloqueados (<span id="count"></span>)</h2>
+    <form id="addForm" class="row">
+      <input type="text" id="newDomain" placeholder="ejemplo.com" style="flex:1" autocomplete="off">
+      <button class="primary">Añadir</button>
+    </form>
+    <p class="muted">Añadir es inmediato. Quitar un sitio requiere esperar.</p>
+    <ul id="domains"></ul>
+  </section>
+</main>
+<script src="options.js"></script>
+</body>
+</html>
