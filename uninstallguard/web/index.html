@@ -111,7 +111,7 @@ dialog.wide{max-width:520px}
     <div class="scroll"><table id="recent"></table></div>
   </section>
 
-  <footer>Proteger un programa es inmediato; <b>dejar de protegerlo</b> o desactivar la protección pide la contraseña.</footer>
+  <footer><a href="#" id="diag" style="color:var(--accent)">Diagnóstico</a> · Proteger un programa es inmediato; <b>dejar de protegerlo</b> o desactivar la protección pide la contraseña.</footer>
 </div>
 
 <dialog id="dlgPick" class="wide">
@@ -130,6 +130,11 @@ dialog.wide{max-width:520px}
   <h3>Contraseña de seguridad</h3>
   <p>Desbloquea los cambios durante 10 minutos.</p>
   <form id="fUnlock"><input type="password" id="pw3" placeholder="Contraseña" autocomplete="current-password"><div class="err" id="e2"></div><div class="btns"><button type="button" class="ghost" id="cancelU">Cancelar</button><button class="primary">Desbloquear</button></div></form>
+</dialog>
+<dialog id="dlgDiag" style="max-width:760px">
+  <h3>Diagnóstico</h3><p>Copia este texto si necesitas pedir ayuda.</p>
+  <pre id="diagText" style="max-height:50vh;overflow:auto;background:var(--bg);padding:12px;border-radius:10px;font-size:12px;white-space:pre-wrap;margin:0 0 12px">Cargando…</pre>
+  <div class="btns"><button class="ghost" id="copyDiag">Copiar</button><button class="primary" id="closeDiag">Cerrar</button></div>
 </dialog>
 <div id="toast" role="status"></div>
 <script>
@@ -219,6 +224,10 @@ $("#lockbtn").onclick=async()=>{
   else{pending=null;$("#pw3").value="";$("#e2").textContent="";$("#dlgUnlock").showModal();$("#pw3").focus()}
 };
 $("#quit").onclick=async()=>{try{await api("/api/quit",{})}catch(e){}document.body.innerHTML='<p style="padding:40px;text-align:center;font-family:system-ui">Panel cerrado. La protección sigue funcionando. Abre UninstallGuard otra vez para cambiar ajustes.</p>'};
+$("#diag").onclick=async ev=>{ev.preventDefault();$("#diagText").textContent="Cargando… (puede tardar unos segundos)";$("#dlgDiag").showModal();
+  try{$("#diagText").textContent=(await api("/api/diagnose")).text}catch(e){$("#diagText").textContent=e.message}};
+$("#closeDiag").onclick=()=>$("#dlgDiag").close();
+$("#copyDiag").onclick=()=>{navigator.clipboard.writeText($("#diagText").textContent).then(()=>toast("Copiado"))};
 refresh();setInterval(refresh,4000);
 </script>
 </body>

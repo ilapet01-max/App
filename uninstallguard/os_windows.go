@@ -165,8 +165,52 @@ func enableService(items []Item) error {
 	for i := range items {
 		items[i].HadLock = applyItem(items[i], false)
 	}
+	os.Remove(filepath.Join(dir, "heartbeat.txt"))
 	run("schtasks", "/run", "/tn", taskName)
-	return nil
+	for i := 0; i < 20; i++ { // el servicio debe dar señales de vida
+		time.Sleep(500 * time.Millisecond)
+		if heartbeatFresh() {
+			return nil
+		}
+	}
+	run("schtasks", "/delete", "/tn", taskName, "/f")
+	for _, it := range items {
+		releaseItem(it)
+	}
+	return fmt.Errorf("el servicio de vigilancia no arrancó (puede que el antivirus haya bloqueado %s). Mira «Diagnóstico»", installedExe())
+}
+
+func heartbeatFresh() bool {
+	b, err := os.ReadFile(filepath.Join(dataDir(), "heartbeat.txt"))
+	var n int64
+	fmt.Sscan(strings.TrimSpace(string(b)), &n)
+	return err == nil && time.Since(time.Unix(n, 0)) < 30*time.Second
+}
+
+func diagnose(cfg Config) string {
+	var b strings.Builder
+	sec := func(t, body string) { fmt.Fprintf(&b, "== %s ==\n%s\n\n", t, strings.TrimSpace(body)) }
+	out, _ := run("schtasks", "/query", "/tn", taskName, "/fo", "LIST", "/v")
+	sec("Tarea programada "+taskName, out)
+	if fi, err := os.Stat(installedExe()); err == nil {
+		sec("Programa instalado", fmt.Sprintf("%s (%d bytes)", installedExe(), fi.Size()))
+	} else {
+		sec("Programa instalado", "NO existe: "+installedExe()+" (¿lo borró el antivirus?)")
+	}
+	sec("El servicio da señales de vida", fmt.Sprint(heartbeatFresh()))
+	sec("Protección activada en la configuración", fmt.Sprint(cfg.Enabled))
+	for _, it := range cfg.Items {
+		var t strings.Builder
+		o, err := run("reg", "query", it.Key, "/v", "NoRemove")
+		fmt.Fprintf(&t, "NoRemove: %v %s\n", err == nil && strings.Contains(o, "0x1"), strings.TrimSpace(o))
+		exe, args := splitCmd(it.Uninstall)
+		_, serr := os.Stat(exe)
+		fmt.Fprintf(&t, "Desinstalador: %q args=%q existe=%v\n", exe, args, serr == nil)
+		fmt.Fprintf(&t, "Se reconocería su desinstalador: %v\n", it.Matches(exe, it.Uninstall))
+		fmt.Fprintf(&t, "Carpeta: %q reforzada=%v", it.Dir, it.Strong)
+		sec("Programa protegido: "+it.Name, t.String())
+	}
+	return b.String()
 }
 
 func disableService(items []Item) error {

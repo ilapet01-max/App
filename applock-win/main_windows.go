@@ -198,9 +198,48 @@ func cmdEnable() {
 		fmt.Println("No se pudo crear la tarea programada:", err)
 		return
 	}
+	os.Remove(filepath.Join(dataDir(), "heartbeat.txt"))
 	run("schtasks", "/run", "/tn", taskName)
+	for i := 0; i < 20 && !heartbeatFresh(); i++ {
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !heartbeatFresh() {
+		fmt.Println("AVISO: el vigilante NO arrancó (¿antivirus?). Solo están activas las políticas de Windows (.msi/Store/winget).")
+		fmt.Println("Ejecuta «Diagnóstico» (opción 6) para ver el motivo.")
+	}
 	applyPolicies(true)
 	fmt.Println("Bloqueo ACTIVADO (se mantiene tras reiniciar).")
+}
+
+func heartbeatFresh() bool {
+	b, err := os.ReadFile(filepath.Join(dataDir(), "heartbeat.txt"))
+	n, _ := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	return err == nil && time.Since(time.Unix(n, 0)) < 30*time.Second
+}
+
+func cmdDiagnose() {
+	out := func(t string, a string, args ...string) {
+		c := exec.Command(a, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		b, _ := c.CombinedOutput()
+		fmt.Printf("== %s ==\n%s\n\n", t, strings.TrimSpace(string(b)))
+	}
+	fmt.Println("Administrador:", isAdmin())
+	if fi, err := os.Stat(installedExe()); err == nil {
+		fmt.Printf("Programa instalado: %s (%d bytes)\n", installedExe(), fi.Size())
+	} else {
+		fmt.Println("Programa instalado: NO existe", installedExe(), "(¿lo borró el antivirus?)")
+	}
+	fmt.Println("El vigilante da señales de vida:", heartbeatFresh())
+	fmt.Println()
+	out("Tarea programada "+taskName, "schtasks", "/query", "/tn", taskName, "/fo", "LIST", "/v")
+	for _, p := range policies {
+		out("Política "+p.name, "reg", "query", p.key, "/v", p.name)
+	}
+	if b, err := os.ReadFile(filepath.Join(dataDir(), "watch.log")); err == nil {
+		l := strings.Split(strings.TrimSpace(string(b)), "\n")
+		fmt.Printf("== Últimos bloqueos ==\n%s\n", strings.Join(l[max(0, len(l)-10):], "\n"))
+	}
 }
 
 func cmdAllow(arg string) {
@@ -285,9 +324,13 @@ func cmdWatch() {
 	exclude := []string{os.Getenv("SystemRoot") + `\`, os.Getenv("ProgramFiles") + `\`, os.Getenv("ProgramFiles(x86)") + `\`, dataDir() + `\`}
 	logf, _ := os.OpenFile(filepath.Join(dataDir(), "watch.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	known := processes()
-	lastPolicy := time.Time{}
+	lastPolicy, lastBeat := time.Time{}, time.Time{}
 	for {
 		time.Sleep(700 * time.Millisecond)
+		if time.Since(lastBeat) > 5*time.Second {
+			os.WriteFile(filepath.Join(dataDir(), "heartbeat.txt"), []byte(fmt.Sprint(time.Now().Unix())), 0o600)
+			lastBeat = time.Now()
+		}
 		enforcing := time.Now().Unix() >= loadState().AllowUntil
 		if enforcing && time.Since(lastPolicy) > policyTick {
 			applyPolicies(true)
@@ -320,7 +363,7 @@ func menu() {
 	for {
 		fmt.Print("\n=== applock: contraseña para instalar aplicaciones ===\n" +
 			"1) Definir / cambiar contraseña\n2) Activar bloqueo\n3) Permitir instalar unos minutos (pide contraseña)\n" +
-			"4) Desactivar bloqueo (pide contraseña)\n5) Estado\n0) Salir\n> ")
+			"4) Desactivar bloqueo (pide contraseña)\n5) Estado\n6) Diagnóstico\n0) Salir\n> ")
 		switch readLine() {
 		case "1":
 			cmdSetPassword()
@@ -333,6 +376,8 @@ func menu() {
 			cmdDisable()
 		case "5":
 			cmdStatus()
+		case "6":
+			cmdDiagnose()
 		case "0":
 			return
 		}
@@ -359,9 +404,11 @@ func main() {
 		cmdDisable()
 	case "status":
 		cmdStatus()
+	case "diagnose":
+		cmdDiagnose()
 	case "watch":
 		cmdWatch()
 	default:
-		fmt.Println("Uso: applock.exe [set-password|enable|allow [minutos]|disable|status]")
+		fmt.Println("Uso: applock.exe [set-password|enable|allow [minutos]|disable|status|diagnose]")
 	}
 }

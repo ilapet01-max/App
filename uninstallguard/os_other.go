@@ -50,3 +50,5 @@ func runDaemon() {
 		time.Sleep(5 * time.Second)
 	}
 }
+
+func diagnose(Config) string { return "El diagnóstico solo está disponible en Windows." }

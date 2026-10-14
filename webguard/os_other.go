@@ -23,3 +23,5 @@ func enableProtection() error       { return nil }
 func disableProtection() error      { return nil }
 func watchdog(*Daemon, string)      {}
 func loadUpstreams(string) []string { return nil }
+
+func diagnose(Config) string { return "El diagnóstico solo está disponible en Windows." }

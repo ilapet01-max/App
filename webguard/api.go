@@ -57,6 +57,9 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("POST /api/remove", a.removeItem)
 	mux.HandleFunc("POST /api/protection", a.protection)
 	mux.HandleFunc("POST /api/safesearch", a.safesearch)
+	mux.HandleFunc("GET /api/diagnose", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]string{"text": diagnose(a.store.Get())})
+	})
 	mux.HandleFunc("POST /api/quit", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"ok": true})
 		go func() { time.Sleep(200 * time.Millisecond); os.Exit(0) }()

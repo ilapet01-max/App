@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,8 +92,26 @@ func watchdog(d *Daemon, dir string) {
 	ps(setDNS)
 }
 
+func flushDNS() { run("ipconfig", "/flushdns") }
+
+// puertoLibre: 127.0.0.1:53 debe poder abrirlo el servicio (o ya responder él).
+func puertoLibre() error {
+	if probeDaemon("127.0.0.1:53") {
+		return nil
+	}
+	pc, err := net.ListenPacket("udp", "127.0.0.1:53")
+	if err != nil {
+		return fmt.Errorf("el puerto 53 (DNS) ya lo usa otro programa o servicio de Windows (Hyper-V, uso compartido de Internet, otro filtro DNS…): %v", err)
+	}
+	pc.Close()
+	return nil
+}
+
 func enableProtection() error {
 	dir := dataDir()
+	if err := puertoLibre(); err != nil {
+		return err
+	}
 	self, _ := os.Executable()
 	if !strings.EqualFold(self, installedExe()) {
 		b, err := os.ReadFile(self)
@@ -100,7 +119,7 @@ func enableProtection() error {
 			err = os.WriteFile(installedExe(), b, 0o755)
 		}
 		if err != nil {
-			return fmt.Errorf("no se pudo copiar el programa: %v", err)
+			return fmt.Errorf("no se pudo copiar el programa (¿antivirus?): %v", err)
 		}
 	}
 	hardenDir(dir)
@@ -110,17 +129,65 @@ func enableProtection() error {
 	}
 	if out, err := run("schtasks", "/create", "/tn", taskName, "/tr", `"`+installedExe()+`" run`,
 		"/sc", "onstart", "/ru", "SYSTEM", "/rl", "highest", "/f"); err != nil {
-		return fmt.Errorf("no se pudo crear la tarea: %s", strings.TrimSpace(out))
+		return fmt.Errorf("no se pudo crear la tarea programada: %s", strings.TrimSpace(out))
 	}
 	run("schtasks", "/run", "/tn", taskName)
-	time.Sleep(1500 * time.Millisecond) // deja que el demonio abra el puerto 53 antes de apuntar el DNS a él
-	if out, err := ps(setDNS); err != nil {
-		return fmt.Errorf("no se pudo cambiar el DNS: %s", strings.TrimSpace(out))
+	// Solo apuntamos el DNS al servicio si de verdad responde: si no, nos quedaríamos sin Internet.
+	alive := false
+	for i := 0; i < 16 && !alive; i++ {
+		time.Sleep(500 * time.Millisecond)
+		alive = probeDaemon("127.0.0.1:53")
+	}
+	if !alive {
+		run("schtasks", "/delete", "/tn", taskName, "/f")
+		return fmt.Errorf("el servicio de filtrado no arrancó (puede que el antivirus haya bloqueado %s). No se ha tocado tu DNS. Mira «Diagnóstico»", installedExe())
+	}
+	ps(setDNS)
+	flushDNS()
+	// Comprobación de extremo a extremo con el resolutor de Windows.
+	time.Sleep(500 * time.Millisecond)
+	if addrs, err := net.LookupHost(probeName); err != nil || len(addrs) == 0 {
+		ps(`Get-NetAdapter | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses }`)
+		flushDNS()
+		return fmt.Errorf("Windows no está usando el DNS local (¿VPN o adaptador especial?). Se ha restaurado tu DNS. Mira «Diagnóstico»")
 	}
 	return nil
 }
 
+func diagnose(cfg Config) string {
+	var b strings.Builder
+	sec := func(t, body string) { fmt.Fprintf(&b, "== %s ==\n%s\n\n", t, strings.TrimSpace(body)) }
+	out, _ := run("schtasks", "/query", "/tn", taskName, "/fo", "LIST", "/v")
+	sec("Tarea programada "+taskName, out)
+	if fi, err := os.Stat(installedExe()); err == nil {
+		sec("Programa instalado", fmt.Sprintf("%s (%d bytes)", installedExe(), fi.Size()))
+	} else {
+		sec("Programa instalado", "NO existe: "+installedExe()+" (¿lo borró el antivirus?)")
+	}
+	out, _ = run("netstat", "-ano", "-p", "udp")
+	var l []string
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, ":53 ") {
+			l = append(l, strings.TrimSpace(ln))
+		}
+	}
+	sec("Quién escucha en el puerto 53 (UDP)", strings.Join(l, "\n"))
+	sec("Servicio responde en 127.0.0.1:53", fmt.Sprint(probeDaemon("127.0.0.1:53")))
+	out, _ = ps(`Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses } | ForEach-Object { '{0} [{1}]: {2}' -f $_.InterfaceAlias,$_.AddressFamily,($_.ServerAddresses -join ', ') }`)
+	sec("DNS de cada adaptador", out)
+	addrs, err := net.LookupHost(probeName)
+	sec("Windows resuelve "+probeName+" (debe dar 127.0.0.1)", fmt.Sprint(addrs, err))
+	if len(cfg.Domains) > 0 {
+		a, err := net.LookupHost(cfg.Domains[0])
+		sec("Windows resuelve "+cfg.Domains[0]+" (bloqueado: debe dar 127.0.0.1)", fmt.Sprint(a, err))
+	}
+	out, _ = run("reg", "query", `HKLM\SOFTWARE\Policies\Google\Chrome`, "/v", "DnsOverHttpsMode")
+	sec("Política DoH de Chrome", out)
+	return b.String()
+}
+
 func disableProtection() error {
+	defer flushDNS()
 	run("schtasks", "/delete", "/tn", taskName, "/f")
 	run("taskkill", "/f", "/im", "webguard.exe", "/fi", fmt.Sprintf("PID ne %d", os.Getpid()))
 	// Vuelve al DNS automático (DHCP) en todos los adaptadores.
